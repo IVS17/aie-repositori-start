@@ -22,6 +22,7 @@ def _sample_df() -> pd.DataFrame:
     )
 
 
+
 def test_summarize_dataset_basic():
     df = _sample_df()
     summary = summarize_dataset(df)
@@ -59,3 +60,29 @@ def test_correlation_and_top_categories():
     city_table = top_cats["city"]
     assert "value" in city_table.columns
     assert len(city_table) <= 2
+
+def test_has_constant_columns():
+
+    df = pd.DataFrame(
+        {
+            "id": [1, 2, 3, 4],    
+            "constant_1": [5, 5, 5, 5],
+            "constant_2": [0, 0, 0, 0],
+            "city": ["A", "B", "A", None],
+        }
+    )
+
+
+    summary = summarize_dataset(df)
+    missing_df = missing_table(df)
+    flags = compute_quality_flags(summary, missing_df)
+
+
+    assert flags['has_constant_columns'] is True
+
+    constant_cols = flags.get('constant_columns', [])
+    assert isinstance(constant_cols, list)
+
+
+
+
