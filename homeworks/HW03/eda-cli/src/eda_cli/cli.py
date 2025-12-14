@@ -68,6 +68,7 @@ def report(
     encoding: str = typer.Option("utf-8", help="Кодировка файла."),
     max_hist_columns: int = typer.Option(6, help="Максимум числовых колонок для гистограмм."),
     title: str = typer.Option("# Заголовок", help="Заголвок отчёта"),
+    show_const: bool = typer.Option(False, help="Показывает в отчёте информацию о константных строках"),
 ) -> None:
     """
     Сгенерировать полный EDA-отчёт:
@@ -114,8 +115,10 @@ def report(
         f.write(f"- Макс. доля пропусков по колонке: **{quality_flags['max_missing_share']:.2%}**\n")
         f.write(f"- Слишком мало строк: **{quality_flags['too_few_rows']}**\n")
         f.write(f"- Слишком много колонок: **{quality_flags['too_many_columns']}**\n")
-        f.write(f"- Слишком много пропусков: **{quality_flags['too_many_missing']}**\n")
-        f.write(f"- Наличие константных столбцов **{quality_flags['has_constant_columns']}**\n\n")
+        f.write(f"- Слишком много пропусков: **{quality_flags['too_many_missing']}**\n\n")
+        if show_const:
+            f.write(f"- Наличие константных столбцов **{quality_flags['has_constant_columns']}**\n")#вывод флага о наличии константных столбцов
+            f.write(f"- Константные столбцы **{quality_flags['constant_columns']}**\n\n")#вывод константных столбцов
 
         f.write("## Колонки\n\n")
         f.write("См. файл `summary.csv`.\n\n")
