@@ -189,8 +189,9 @@ def compute_quality_flags(summary: DatasetSummary, missing_df: pd.DataFrame) -> 
     total_null_cells = int(missing_df["missing_count"].sum()) if not missing_df.empty else 0
     flags["total_null_cells"] = total_null_cells   
 
-    #
-    flags["has_constant_columns"] = any(summary.nunique(dropna=True) == 1 for col in summary.columns)
+   # Проверка константных столбцов
+    flags["has_constant_columns"] = any(col.unique == 1 for col in summary.columns)
+    flags["constant_columns"] = [col.name for col in summary.columns if col.unique == 1]
 
     # Простейший «скор» качества
     score = 1.0

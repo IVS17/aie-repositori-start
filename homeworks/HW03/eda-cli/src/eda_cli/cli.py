@@ -67,6 +67,7 @@ def report(
     sep: str = typer.Option(",", help="Разделитель в CSV."),
     encoding: str = typer.Option("utf-8", help="Кодировка файла."),
     max_hist_columns: int = typer.Option(6, help="Максимум числовых колонок для гистограмм."),
+    title: str = typer.Option("# Заголовок", help="Заголвок отчёта"),
 ) -> None:
     """
     Сгенерировать полный EDA-отчёт:
@@ -74,6 +75,7 @@ def report(
     - статистика пропусков;
     - корреляционная матрица;
     - top-k категорий по категориальным признакам;
+    -title заголовок отчёта в report.md
     - картинки: гистограммы, матрица пропусков, heatmap корреляции.
     """
     out_root = Path(out_dir)
@@ -103,6 +105,7 @@ def report(
     md_path = out_root / "report.md"
     with md_path.open("w", encoding="utf-8") as f:
         f.write(f"# EDA-отчёт\n\n")
+        f.write(f"Отчёт с заголовком:  {title}\n\n") #доработка с заголовком отчёта
         f.write(f"Исходный файл: `{Path(path).name}`\n\n")
         f.write(f"Строк: **{summary.n_rows}**, столбцов: **{summary.n_cols}**\n\n")
 
@@ -111,7 +114,8 @@ def report(
         f.write(f"- Макс. доля пропусков по колонке: **{quality_flags['max_missing_share']:.2%}**\n")
         f.write(f"- Слишком мало строк: **{quality_flags['too_few_rows']}**\n")
         f.write(f"- Слишком много колонок: **{quality_flags['too_many_columns']}**\n")
-        f.write(f"- Слишком много пропусков: **{quality_flags['too_many_missing']}**\n\n")
+        f.write(f"- Слишком много пропусков: **{quality_flags['too_many_missing']}**\n")
+        f.write(f"- Наличие константных столбцов **{quality_flags['has_constant_columns']}**\n\n")
 
         f.write("## Колонки\n\n")
         f.write("См. файл `summary.csv`.\n\n")
