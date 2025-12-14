@@ -185,6 +185,13 @@ def compute_quality_flags(summary: DatasetSummary, missing_df: pd.DataFrame) -> 
     flags["max_missing_share"] = max_missing_share
     flags["too_many_missing"] = max_missing_share > 0.5
 
+    #Наличие пустых ячеек
+    total_null_cells = int(missing_df["missing_count"].sum()) if not missing_df.empty else 0
+    flags["total_null_cells"] = total_null_cells   
+
+    #
+    flags["has_constant_columns"] = any(summary.nunique(dropna=True) == 1 for col in summary.columns)
+
     # Простейший «скор» качества
     score = 1.0
     score -= max_missing_share  # чем больше пропусков, тем хуже
