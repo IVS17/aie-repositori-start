@@ -5,6 +5,7 @@ from time import perf_counter
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
+from typing import Dict, Any
 
 from .core import compute_quality_flags, missing_table, summarize_dataset
 
@@ -77,6 +78,14 @@ class QualityResponse(BaseModel):
         description="Размеры датасета: {'n_rows': ..., 'n_cols': ...}, если известны",
     )
 
+
+class QualityFlagsResponse(BaseModel):
+    """Ответ с флагами качества датасета."""
+    
+    flags: Dict[str, Any] = Field( 
+        ...,
+        description="Флаги качества данных, могут включать списки"
+    )
 
 # ---------- Системный эндпоинт ----------
 
@@ -242,3 +251,117 @@ async def quality_from_csv(file: UploadFile = File(...)) -> QualityResponse:
         flags=flags_bool,
         dataset_shape={"n_rows": n_rows, "n_cols": n_cols},
     )
+
+# ---------- /quality-flags-from-csv: полные флаги качества ----------
+
+def detect_high_cardinality_categoricals(df: pd.DataFrame, threshold: int = 100) -> bool:
+    """Обнаруживает категориальные признаки с высокой кардинальностью."""
+    from pandas.api import types as ptypes
+    
+    for column in df.columns:
+        s = df[column]
+        if ptypes.is_object_dtype(s) or isinstance(s.dtype, pd.CategoricalDtype):
+            unique_count = s.nunique(dropna=True)
+            if unique_count > threshold:
+                return True
+    return False
+
+
+def detect_suspicious_id_duplicates(df: pd.DataFrame) -> bool:
+    """Проверяет наличие дубликатов в потенциальных ID-колонках."""
+    id_patterns = ['id', 'ID', 'Id', '_id', 'key', 'Key', 'code', 'Code', 'num', 'Num']
+    
+    for column in df.columns:
+        col_lower = column.lower()
+        if any(pattern in col_lower for pattern in id_patterns):
+            # Проверяем на дубликаты
+            value_counts = df[column].value_counts()
+            if any(value_counts > 1):
+                return True
+    return False
+
+
+def detect_many_zero_values(df: pd.DataFrame, threshold: float = 0.3) -> bool:
+    """Проверяет наличие колонок с большим количеством нулевых значений."""
+    for column in df.select_dtypes(include='number').columns:
+        zero_count = (df[column] == 0).sum()
+        total_count = df[column].notna().sum()
+        
+        if total_count > 0 and (zero_count / total_count) > threshold:
+            return True
+    return False
+
+
+@app.post(
+    "/quality-flags-from-csv",
+    response_model=QualityFlagsResponse,
+    tags=["quality"],
+    summary="Получение всех флагов качества по CSV-файлу",
+)
+async def quality_flags_from_csv(file: UploadFile = File(...)) -> QualityFlagsResponse:
+    """
+    Эндпоинт, который принимает CSV-файл, анализирует его с помощью EDA-ядра
+    и возвращает полный набор булевых флагов качества данных.
+    
+    Возвращает JSON в формате:
+    {
+        "flags": {
+            "too_few_rows": false,
+            "too_many_missing": true,
+            "has_constant_columns": false,
+            "has_high_cardinality_categoricals": true,
+            "has_suspicious_id_duplicates": false,
+            "has_many_zero_values": true
+        }
+    }
+    """
+    start = perf_counter()
+
+    # Проверка типа файла
+    if file.content_type not in ("text/csv", "application/vnd.ms-excel", "application/octet-stream"):
+        raise HTTPException(status_code=400, detail="Ожидается CSV-файл (content-type text/csv).")
+
+    try:
+        df = pd.read_csv(file.file)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Не удалось прочитать CSV: {exc}")
+
+    if df.empty:
+        raise HTTPException(status_code=400, detail="CSV-файл не содержит данных (пустой DataFrame).")
+
+    # Используем EDA-ядро для анализа
+    summary = summarize_dataset(df)
+    missing_df = missing_table(df)
+    flags_all = compute_quality_flags(summary, missing_df)
+
+    # Извлекаем базовые флаги из compute_quality_flags
+    has_constant_columns = flags_all.get("has_constant_columns", False)
+    too_few_rows = flags_all.get("too_few_rows", False)
+    too_many_columns = flags_all.get("too_many_columns", False)
+    
+    # Вычисляем too_many_missing на основе missing_df
+    max_missing_share = float(missing_df["missing_share"].max()) if not missing_df.empty else 0.0
+    too_many_missing = max_missing_share > 0.5
+
+    # Дополнительные детекторы
+    has_high_cardinality_categoricals = detect_high_cardinality_categoricals(df)
+    has_suspicious_id_duplicates = detect_suspicious_id_duplicates(df)
+    has_many_zero_values = detect_many_zero_values(df)
+
+    # Собираем все флаги в требуемом формате
+    flags = {
+        "too_few_rows": bool(too_few_rows),
+        "too_many_missing": bool(too_many_missing),
+        "has_constant_columns": bool(has_constant_columns),
+        "has_high_cardinality_categoricals": bool(has_high_cardinality_categoricals),
+        "has_suspicious_id_duplicates": bool(has_suspicious_id_duplicates),
+        "has_many_zero_values": bool(has_many_zero_values),
+    }
+
+    latency_ms = (perf_counter() - start) * 1000.0
+    print(
+        f"[quality-flags-from-csv] filename={file.filename!r} "
+        f"flags={flags} latency_ms={latency_ms:.1f} ms"
+    )
+
+    return QualityFlagsResponse(flags=flags)
