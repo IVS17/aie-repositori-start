@@ -144,7 +144,8 @@ http://127.0.0.1:8000/docs
 
 - вызывать `GET /health`;
 - вызывать `POST /quality` (форма для JSON);
-- вызывать `POST /quality-from-csv` (форма для загрузки файла).
+- вызывать `POST /quality-from-csv` (форма для загрузки файла)
+- вызывать `POST /quality-flags-from-csv` (форма для загрузки файла)
 
 ---
 
@@ -244,6 +245,50 @@ curl -X POST "http://127.0.0.1:8000/quality-from-csv" \
 - `flags` - булевы флаги из `compute_quality_flags`;
 - `dataset_shape` - реальные размеры датасета (`n_rows`, `n_cols`);
 - `latency_ms` - время обработки запроса.
+
+---
+
+### 5. `POST /quality_flags_from_csv` – Получение всех флагов качества по CSV-файлу
+
+Эндпоинт принимает CSV-файл, внутри:
+
+- читает его в `pandas.DataFrame`;
+- вызывает функции из `eda_cli.core`:
+
+  - `summarize_dataset`,
+  - `missing_table`,
+  - `compute_quality_flags`;
+- возвращает оценку качества датасета в том же формате, что `/quality`.
+
+**Запрос:**
+
+```http
+POST /quality_flags_from_csv
+Content-Type: multipart/form-data
+file: <CSV-файл>
+```
+
+Через Swagger:
+
+- в `/docs` открыть `POST /quality_flags_from_csv`,
+- нажать `Try it out`,
+- выбрать файл (например, `data/example.csv`),
+- нажать `Execute`.
+
+**Пример вызова через `curl` (Linux/macOS/WSL):**
+
+```bash
+curl -X POST "http://127.0.0.1:8000/quality_flags_from_csv" \
+  -F "file=@data/example.csv"
+```
+
+Ответ будет содержать:
+
+- `too_many_missing` - флаг избыточного количества пропущенных значений;
+- `has_constant_columns` - флаг наличия постоянных (неизменяемых) столбцов;
+- `has_high_cardinality_categoricals` - флаг категориальных признаков с высокой кардинальностью;
+- `has_suspicious_id_duplicates` - флаг подозрительных дубликатов идентификаторов;
+- `has_many_zero_values` - флаг избыточного количества нулевых значений.
 
 ---
 
